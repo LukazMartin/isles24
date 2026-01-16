@@ -42,6 +42,7 @@ def main():
         data_root=data_root,
         target_dir=run_dir,
         modalities=config.modalities,
+        process_guide=config.fg_guide,
         val_fold=0,
     )
 
