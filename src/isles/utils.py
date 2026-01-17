@@ -158,7 +158,7 @@ def patch_guide(datalist: dict, process_guide: str) -> dict:
 
 def generate_datalist(
     data_root: Path,
-    target_dir: Path,
+    target_dir: Path | None,
     modalities: list[str] | str,
     process_guide: str | None = None,
     n_folds: int = 5,
@@ -170,9 +170,7 @@ def generate_datalist(
 ) -> dict:
     """Generate datalist compatible with MONAI and return it as a dictionary"""
 
-    target_dir.mkdir(exist_ok=True, parents=True)
-
-    if not excluded_cases:
+    if excluded_cases is None:
         excluded_cases = []
 
     # Make stratified split
@@ -214,8 +212,11 @@ def generate_datalist(
             datalist_dict["training"].append(path_dict)
 
     # Save datalist
-    with open(target_dir / "datalist.json", "w") as file:
-        json.dump(datalist_dict, file, indent=4)
+    if target_dir is not None:
+        target_dir.mkdir(exist_ok=True, parents=True)
+        with open(target_dir / "datalist.json", "w") as file:
+            json.dump(datalist_dict, file, indent=4)
+
     return datalist_dict
 
 
