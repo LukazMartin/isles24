@@ -93,7 +93,7 @@ class NNUNetConfig:
     configuration: str = "3d_fullres"
     plans_name: str = "nnUNetResEncUNetLPlans"
 
-    wandb_project: str = "nnunet-comparison"
+    wandb_project: str = "ISLES"
 
     intensity_windows: dict[str, Sequence[float]] | None = None
     histogram_equalization: bool = False
@@ -376,8 +376,8 @@ def run_preprocessing(config: NNUNetConfig) -> None:
 
 def train(
     config: NNUNetConfig,
-    wandb_name: str,
-    trainer_class: nnUNetTrainer | None = None,
+    run_id: str,
+    run_dir: Path,
 ) -> None:
     """
     Train nnU-Net with W&B logging.
@@ -386,22 +386,21 @@ def train(
     ----------
     config : NNUNetConfig
         Pipeline configuration.
-    wandb_name : str, optional
+    run_id : str
         W&B run name.
-    trainer_class : type, optional
-        Custom trainer class. If None, creates a W&B trainer automatically.
+    run_dir : Path
+        Directory with the run files.
+
     """
     config.set_environment()
 
     from nnunetv2.run import run_training as run_training_mod
 
-    # Create trainer class if not provided
-    run_name = wandb_name
-    if trainer_class is None:
-        trainer_class = create_wandb_trainer_class(
-            wandb_project=config.wandb_project,
-            run_id=run_name,
-        )
+    trainer_class = create_wandb_trainer_class(
+        wandb_project=config.wandb_project,
+        run_id=run_id,
+        run_dir=run_dir,
+    )
 
     # Patch the class lookup
     original_find = run_training_mod.recursive_find_python_class
