@@ -18,6 +18,7 @@ dependencies:
     - torchvision
     - wandb[importers]
     - lightning
+    - nnunetv2
     - monai[all]
     - panoptica
     - -e .
