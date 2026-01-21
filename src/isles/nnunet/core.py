@@ -83,7 +83,7 @@ class NNUNetConfig:
     datalist_path: Path
     data_root: Path
 
-    dataset_id: int = 1
+    dataset_id: int = 100
     dataset_name: str = "ISLES2024"
     labels: dict[str, int] = field(
         default_factory=lambda: {"background": 0, "lesion": 1}
@@ -241,18 +241,22 @@ def extract_case_id(filepath: str) -> str:
     return match.group(1)
 
 
+def compute_crop_slices(brain_mask: np.ndarray) -> tuple[slice, ...]:
+    """Compute crop slices from brain mask."""
+    crop_fg = CropForeground(select_fn=lambda x: x > 0.5)
+    box_start, box_end = crop_fg.compute_bounding_box(brain_mask)
+    return tuple(slice(s, e) for s, e in zip(box_start, box_end))
+
+
 def preprocess_image(
     image: np.ndarray,
-    brain_mask: np.ndarray,
+    crop_slices: tuple[slice, ...],
     intensity_window: tuple[float, float] | None = None,
     histogram_equalization: bool = False,
 ) -> np.ndarray:
     """Apply intensity preprocessing to image data."""
 
-    # Apply brain mask and crop foreground
-    image[brain_mask == 0] = 0
-    crop_fg = CropForeground(select_fn=lambda x: x > 0.5)
-    image = crop_fg(image)
+    image = image[crop_slices]
 
     if intensity_window is not None:
         lo, hi = intensity_window
@@ -301,21 +305,32 @@ def convert_datalist_to_nnunet(config: NNUNetConfig, force: bool = False) -> Non
         case_folds[case_id] = case["fold"]
 
         brain_mask = nib.load(case["brain_mask"]).get_fdata()
+        crop_slices = compute_crop_slices(brain_mask)
 
         for ch_idx, img_path in enumerate(case["image"]):
             modality = config.modalities[ch_idx]
             img = nib.load(img_path)
             img_data = img.get_fdata()
+
+            # Apply brain mask
+            img_data[brain_mask == 0] = 0
+
             img_data = preprocess_image(
                 img_data,
-                brain_mask,
-                intensity_window=config.intensity_windows[modality],
+                crop_slices,
+                intensity_window=config.intensity_windows.get(modality),
                 histogram_equalization=config.histogram_equalization,
             )
             out_path = config.images_tr / f"{case_id}_{ch_idx:04d}.nii.gz"
             nib.save(nib.Nifti1Image(img_data, img.affine, img.header), out_path)
 
-        shutil.copy2(case["label"], config.labels_tr / f"{case_id}.nii.gz")
+        # Crop labels
+        label_img = nib.load(case["label"])
+        label_data = label_img.get_fdata()[crop_slices].astype(np.uint8)
+        nib.save(
+            nib.Nifti1Image(label_data, label_img.affine, label_img.header),
+            config.labels_tr / f"{case_id}.nii.gz",
+        )
 
     # Create dataset.json
     dataset_json = {
@@ -349,7 +364,6 @@ def convert_datalist_to_nnunet(config: NNUNetConfig, force: bool = False) -> Non
 
 def run_preprocessing(config: NNUNetConfig) -> None:
     """Run nnU-Net planning and preprocessing."""
-    config.set_environment()
 
     from nnunetv2.experiment_planning.plan_and_preprocess_api import (
         extract_fingerprints,
