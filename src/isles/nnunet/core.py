@@ -375,7 +375,10 @@ def run_preprocessing(config: NNUNetConfig) -> None:
     extract_fingerprints(dataset_ids=[config.dataset_id])
 
     print(f"Planning with {config.planner}...")
-    plan_experiments(dataset_ids=[config.dataset_id], planner_name=config.planner)
+    plan_experiments(
+        dataset_ids=[config.dataset_id],
+        experiment_planner_class_name=config.planner,
+    )
 
     print(f"Preprocessing {config.configuration}...")
     preprocess(dataset_ids=[config.dataset_id], configurations=[config.configuration])
