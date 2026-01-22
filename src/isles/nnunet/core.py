@@ -126,7 +126,7 @@ class NNUNetConfig:
         self.num_folds = max([max([case["fold"] for case in cases]) + 1])
         self.modalities = datalist["modalities"]
         try:
-            self.val_fold = datalist["validation"][0]
+            self.val_fold = datalist["validation"][0]["fold"]
         except IndexError:
             print("No validation fold defined in datalist.")
 
@@ -166,6 +166,7 @@ def create_wandb_trainer_class(
     run_id: str,
     run_dir: Path,
     config: NNUNetConfig,
+    num_processes: int = 2,
 ) -> type[nnUNetTrainer]:
     """
     Create a W&B-enabled nnUNetTrainer subclass.
@@ -180,6 +181,8 @@ def create_wandb_trainer_class(
         Directory with run data.
     config : NNUNetConfig
         Config class for NNUnet.
+    num_processes: int
+        Number of workers for the dataloader. Default is 2.
 
     Returns
     -------
@@ -189,6 +192,10 @@ def create_wandb_trainer_class(
 
     class WandbnnUNetTrainer(nnUNetTrainer):
         """nnUNetTrainer with W&B logging."""
+
+        def __init__(self, *args, **kwargs) -> None:
+            super().__init__(*args, **kwargs)
+            self.num_processes = num_processes
 
         # Initialize wandb run and log config and artifacts
         def on_train_start(self) -> None:
@@ -393,6 +400,7 @@ def run_preprocessing(config: NNUNetConfig, force: bool = False) -> None:
         plan_experiments(
             dataset_ids=[config.dataset_id],
             experiment_planner_class_name=config.planner,
+            gpu_memory_target_in_gb=18,
         )
 
     print(f"Preprocessing {config.configuration}...")
