@@ -185,10 +185,25 @@ class MultiEncoderSwinUNETR(SwinUNETR):
 
 
 class SwinUNETRPredictor:
-    """
-    Wrapper for Multi-encoder Swin-UNETR inference with sliding window.
+    """Wrapper for Swin-UNETR inference with sliding window.
 
-    Handles device management, sliding window inference, and post-processing.
+    Handles device management, sliding window inference, and post-processing
+    for both single and multi-encoder Swin-UNETR models.
+
+    Parameters
+    ----------
+    model : MultiEncoderSwinUNETR | BaseSwinUNETR
+        Swin-UNETR model for inference
+    roi_size : Sequence[int]
+        Size of sliding window ROI
+    overlap : float, default=0.2
+        Overlap ratio between windows (0-1)
+    sw_batch_size : int, default=2
+        Batch size for sliding window inference
+    sw_blend_mode : str, default="gaussian"
+        Blending mode for overlapping predictions
+    amp : bool, default=True
+        Whether to use automatic mixed precision
     """
 
     def __init__(
@@ -197,6 +212,7 @@ class SwinUNETRPredictor:
         roi_size: Sequence[int],
         overlap: float = 0.2,
         sw_batch_size: int = 2,
+        sw_blend_mode: str = "gaussian",
         amp: bool = True,
     ):
         self.model = model
@@ -205,7 +221,7 @@ class SwinUNETRPredictor:
             roi_size=roi_size,
             sw_batch_size=sw_batch_size,
             overlap=overlap,
-            mode="gaussian",
+            mode=sw_blend_mode,
         )
 
     @classmethod
@@ -215,13 +231,29 @@ class SwinUNETRPredictor:
         config: SwinTrainConfig,
         final: bool = False,
     ) -> "SwinUNETRPredictor":
-        """Create predictor from config."""
+        """Create predictor from training config.
+
+        Parameters
+        ----------
+        model : MultiEncoderSwinUNETR | BaseSwinUNETR
+            Initialized model
+        config : SwinTrainConfig
+            Training configuration
+        final : bool, default=False
+            Whether to use final evaluation settings
+
+        Returns
+        -------
+        SwinUNETRPredictor
+            Predictor instance
+        """
         overlap = config.val_overlap_final if final else config.val_overlap
         return cls(
             model=model,
             roi_size=config.roi_size,
             overlap=overlap,
             sw_batch_size=config.inferer_batch_size,
+            sw_blend_mode=config.inferer_blend_mode,
             amp=config.amp,
         )
 
@@ -231,30 +263,79 @@ class SwinUNETRPredictor:
         checkpoint_path: Path | str,
         device: str | torch.device = "cpu",
         final: bool = False,
+        **config_overrides,
     ) -> "SwinUNETRPredictor":
-        """Create predictor from checkpoint"""
+        """Create predictor from checkpoint.
+
+        Parameters
+        ----------
+        checkpoint_path : Path | str
+            Path to checkpoint file
+        device : str | torch.device, default="cpu"
+            Device to load model on
+        final : bool, default=False
+            Whether to use final evaluation settings
+        **config_overrides
+            Keyword arguments to override in config
+
+        Returns
+        -------
+        SwinUNETRPredictor
+            Predictor instance
+        """
         checkpoint = Checkpoint.load(checkpoint_path)
         config = SwinTrainConfig(**checkpoint.config)
+
+        # Override config attributes
+        for key, value in config_overrides.items():
+            setattr(config, key, value)
 
         model = get_model(config)
         model.load_state_dict(checkpoint.model_state_dict)
         model = model.to(device)
-
         return cls.from_config(model, config, final)
 
     @property
     def device(self) -> torch.device:
-        """Get model's current device."""
+        """Get model's current device.
+
+        Returns
+        -------
+        torch.device
+            Device where model parameters reside
+        """
         return next(self.model.parameters()).device
 
     def to(self, device: torch.device | str) -> "SwinUNETRPredictor":
-        """Move model to device."""
+        """Move model to device.
+
+        Parameters
+        ----------
+        device : torch.device | str
+            Target device
+
+        Returns
+        -------
+        SwinUNETRPredictor
+            Self for method chaining
+        """
         self.model = self.model.to(device)
         return self
 
     @torch.no_grad()
     def predict_logits(self, image: torch.Tensor) -> torch.Tensor:
-        """Predict raw logits using sliding window inference."""
+        """Predict raw logits using sliding window inference.
+
+        Parameters
+        ----------
+        image : torch.Tensor
+            Input image tensor
+
+        Returns
+        -------
+        torch.Tensor
+            Raw logits on original device
+        """
         self.model.eval()
         input_device = image.device
         image = image.to(self.device)
@@ -268,12 +349,34 @@ class SwinUNETRPredictor:
 
     @torch.no_grad()
     def predict_probs(self, image: torch.Tensor) -> torch.Tensor:
-        """Predict class probabilities."""
+        """Predict class probabilities.
+
+        Parameters
+        ----------
+        image : torch.Tensor
+            Input image tensor
+
+        Returns
+        -------
+        torch.Tensor
+            Class probabilities (softmax of logits)
+        """
         logits = self.predict_logits(image)
         return torch.softmax(logits, dim=1)
 
     @torch.no_grad()
     def predict(self, image: torch.Tensor) -> torch.Tensor:
-        """Predict discrete class labels."""
+        """Predict discrete class labels.
+
+        Parameters
+        ----------
+        image : torch.Tensor
+            Input image tensor
+
+        Returns
+        -------
+        torch.Tensor
+            Predicted class labels (argmax of logits)
+        """
         logits = self.predict_logits(image)
         return logits.argmax(dim=1, keepdim=True)

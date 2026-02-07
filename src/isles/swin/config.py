@@ -64,6 +64,8 @@ class SwinTrainConfig:
         Sliding window overlap for final evaluation.
     inferer_batch_size : int
         Batch size for sliding window inference.
+    inferer_blend_mode : str
+        Blend mode for sliding window inference. Can be "constant" or "gaussian".
     device : str
         Device for training ("cuda", "cpu", etc.).
     """
@@ -102,6 +104,7 @@ class SwinTrainConfig:
     val_overlap: float = 0.2
     val_overlap_final: float = 0.5
     inferer_batch_size: int = 4
+    inferer_blend_mode: str = "gaussian"
 
     # Device
     device: str = "cuda"
