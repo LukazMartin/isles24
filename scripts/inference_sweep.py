@@ -11,18 +11,18 @@ from isles.utils import patch_datalist
 from isles.swin.config import SwinTrainConfig
 from isles.swin.transforms import get_val_transforms
 from isles.swin.training import get_dataloader
-from isles.swin.evaluation import final_evaluation
+from isles.swin.evaluation import save_logits
 
 
 def main():
-    roi_size = [96, 64, 32]
-    overlap = [0.1, 0.2, 0.4]
+    roi_size = [96, 64]
+    overlap = [0, 0.2, 0.5]
     blend_mode = ["constant", "gaussian"]
 
     data_root = Path("/home/renku/work/data-local")
     run_id = "run-016"
     run_dir = data_root / f"runs/{run_id}"
-    sweep_dir = run_dir / "inference-sweep"
+    sweep_dir = run_dir / "logit-sweep"
     checkpoint_path = run_dir / "checkpoints/best_model.pt"
 
     config = SwinTrainConfig.from_json(run_dir / "config.json")
@@ -41,7 +41,7 @@ def main():
     for r, o, b in product(roi_size, overlap, blend_mode):
         print(f"roi_size={r}, overlap={o}, blend_mode={b}")
         out_dir = sweep_dir / f"roi_{r}-overlap_{o}-blend_{b}"
-        final_evaluation(
+        save_logits(
             checkpoint_path=checkpoint_path,
             val_loader=val_loader,
             config=config,
@@ -56,7 +56,7 @@ def main():
             "inferer_blend_mode": b,
         }
         with open(out_dir / "params.json", "w") as file:
-            json.dump(params, indent=2)
+            json.dump(params, file, indent=2)
 
 
 if __name__ == "__main__":

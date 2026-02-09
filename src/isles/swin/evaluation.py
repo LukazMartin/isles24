@@ -21,7 +21,7 @@ from isles.metrics import (
 )
 from isles.swin.config import SwinTrainConfig
 from isles.swin.model import SwinUNETRPredictor
-from isles.swin.transforms import get_post_transforms
+from isles.swin.transforms import get_post_transforms, get_logit_post_transforms
 
 
 @torch.no_grad()
@@ -123,3 +123,64 @@ def final_evaluation(
         torch.cuda.empty_cache()
         results_df = pd.DataFrame(results)
         results_df.to_csv(out_dir / "results.csv", index=False)
+
+
+@torch.no_grad()
+def save_logits(
+    checkpoint_path: Path,
+    val_loader: DataLoader,
+    config: SwinTrainConfig,
+    out_dir: Path,
+    **config_overrides,
+) -> None:
+    """Run inference and save raw logits at original resolution.
+
+    This mirrors ``final_evaluation`` but stops before softmax/argmax,
+    saving the full multi-class logit volume for each case. The saved
+    NIfTI files have shape ``(num_classes, H, W, D)`` at original spacing.
+
+    Parameters
+    ----------
+    checkpoint_path : Path
+        Path to model checkpoint.
+    val_loader : DataLoader
+        Validation data loader (should use ``get_val_transforms``).
+    config : SwinTrainConfig
+        Training configuration.
+    out_dir : Path
+        Directory where logit volumes will be saved.
+    **config_overrides
+        Keyword arguments to override in config (e.g., ``val_overlap_final``).
+    """
+    device = torch.device(config.device)
+    predictor = SwinUNETRPredictor.from_checkpoint(
+        checkpoint_path=checkpoint_path,
+        device=device,
+        final=True,
+        **config_overrides,
+    )
+
+    logit_dir = out_dir / "logits"
+    logit_dir.mkdir(exist_ok=True, parents=True)
+    post_transforms = get_logit_post_transforms(
+        val_loader=val_loader, out_dir=logit_dir
+    )
+
+    for batch in tqdm(val_loader, desc="Saving logits", leave=False):
+        image = batch["image"].to(device)
+        logits = predictor.predict_logits(image)
+
+        batch["pred"] = MetaTensor(logits.cpu(), meta=batch["image"].meta.copy())
+        batch["pred"].applied_operations = batch["image"].applied_operations.copy()
+        batch["image"] = batch["image"].cpu()
+
+        batch_list = decollate_batch(batch)
+
+        for sample in batch_list:
+            label_path = sample["label"].meta["filename_or_obj"]
+            case_id = re.search(r"sub-stroke\d+", label_path).group()
+
+            sample = post_transforms(sample)
+            print(f"Saved logits for {case_id}")
+
+        torch.cuda.empty_cache()

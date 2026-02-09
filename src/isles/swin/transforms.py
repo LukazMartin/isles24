@@ -295,3 +295,53 @@ def get_post_transforms(val_loader: DataLoader, out_dir: Path | None = None) -> 
         )
 
     return Compose(transforms)
+
+
+def get_logit_post_transforms(
+    val_loader: DataLoader,
+    out_dir: Path,
+) -> Compose:
+    """Build post-processing transforms that save raw logits at original spacing.
+
+    Unlike ``get_post_transforms``, this skips ``Activationsd`` and
+    ``AsDiscreted`` so that the saved volumes contain raw logit values
+    (float32) rather than discrete class labels.
+
+    Parameters
+    ----------
+    val_loader : DataLoader
+        Validation dataloader, used to retrieve the forward transforms for
+        inversion.
+    out_dir : Path
+        Directory where logit volumes will be saved.
+
+    Returns
+    -------
+    Compose
+        MONAI composed transforms.
+    """
+    val_transforms = val_loader.dataset.transform
+
+    return Compose(
+        [
+            Invertd(
+                keys="pred",
+                transform=val_transforms,
+                orig_keys="image",
+                meta_keys="pred_meta_dict",
+                orig_meta_keys="image_meta_dict",
+                meta_key_postfix="meta_dict",
+                nearest_interp=False,
+                to_tensor=True,
+            ),
+            SaveImaged(
+                keys="pred",
+                meta_keys="pred_meta_dict",
+                output_dir=out_dir,
+                output_postfix="logits",
+                resample=False,
+                separate_folder=False,
+                dtype=np.float32,
+            ),
+        ]
+    )
