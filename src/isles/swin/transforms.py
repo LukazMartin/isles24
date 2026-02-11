@@ -29,6 +29,7 @@ from monai.transforms import (
     AsDiscreted,
     Invertd,
     SaveImaged,
+    MaskIntensityd,
 )
 from monai.utils import convert_to_dst_type
 from monai.data import DataLoader
@@ -52,16 +53,17 @@ def get_train_transforms(config: SwinTrainConfig):
     """
 
     transforms = [
-        LoadImaged(keys=["image", "label", "guide"], image_only=False),
-        EnsureChannelFirstd(keys=["image", "label", "guide"]),
-        Orientationd(keys=["image", "label", "guide"], axcodes="RAS", labels=None),
+        LoadImaged(keys=["image", "label", "brain_mask"], image_only=False),
+        EnsureChannelFirstd(keys=["image", "label", "brain_mask"]),
+        Orientationd(keys=["image", "label", "brain_mask"], axcodes="RAS", labels=None),
+        MaskIntensityd(keys=["image"], mask_key="brain_mask"),
         CropForegroundd(
             keys=["image", "label"],
-            source_key="guide",
-            select_fn=lambda x: x > config.fg_threshold,
-            margin=10,
+            source_key="brain_mask",
+            select_fn=lambda x: x > 0,
+            margin=0,
         ),
-        DeleteItemsd(keys=["guide"]),
+        DeleteItemsd(keys=["brain_mask"]),
         PerChannelScaleIntensityd(
             keys=["image"],
             modalities=config.modalities,
@@ -123,16 +125,17 @@ def get_val_transforms(config: SwinTrainConfig):
     """
 
     transforms = [
-        LoadImaged(keys=["image", "label", "guide"], image_only=False),
-        EnsureChannelFirstd(keys=["image", "label", "guide"]),
-        Orientationd(keys=["image", "label", "guide"], axcodes="RAS", labels=None),
+        LoadImaged(keys=["image", "label", "brain_mask"], image_only=False),
+        EnsureChannelFirstd(keys=["image", "label", "brain_mask"]),
+        Orientationd(keys=["image", "label", "brain_mask"], axcodes="RAS", labels=None),
+        MaskIntensityd(keys=["image"], mask_key="brain_mask"),
         CropForegroundd(
             keys=["image", "label"],
-            source_key="guide",
-            select_fn=lambda x: x > config.fg_threshold,
-            margin=10,
+            source_key="brain_mask",
+            select_fn=lambda x: x > 0,
+            margin=0,
         ),
-        DeleteItemsd(keys=["guide"]),
+        DeleteItemsd(keys=["brain_mask"]),
         PerChannelScaleIntensityd(
             keys=["image"],
             modalities=config.modalities,

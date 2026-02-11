@@ -13,12 +13,11 @@ from isles.utils import generate_datalist
 
 
 def main():
-    run_id = "run-019"
+    run_id = "run-021"
     config = SwinTrainConfig(
-        model="BaseSwinUNETR",
+        model="MultiEncoderSwinUNETR",
         max_epochs=500,
-        modalities=["cbf"],
-        fg_guide="cta",
+        modalities=["cta", "cbf"],
         target_spacing=(1.0, 1.0, 1.0),
         roi_size=(64, 64, 64),
         learning_rate=1e-4,
@@ -42,7 +41,7 @@ def main():
         data_root=data_root,
         target_dir=run_dir,
         modalities=config.modalities,
-        process_guide=config.fg_guide,
+        brain_mask=True,
         val_fold=0,
     )
 
