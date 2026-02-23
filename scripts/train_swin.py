@@ -13,7 +13,7 @@ from isles.utils import generate_datalist
 
 
 def main():
-    run_id = "run-021"
+    run_id = "run-022"
     config = SwinTrainConfig(
         model="MultiEncoderSwinUNETR",
         max_epochs=500,
@@ -21,7 +21,7 @@ def main():
         target_spacing=(1.0, 1.0, 1.0),
         roi_size=(64, 64, 64),
         learning_rate=1e-4,
-        crop_ratios=(1, 3),
+        crop_ratios=(1, 1),
         include_background=False,
         intensity_windows={
             "cta": [0, 90],
