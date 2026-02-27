@@ -30,6 +30,7 @@ def final_evaluation(
     val_loader: DataLoader,
     config: SwinTrainConfig,
     out_dir: Path,
+    save_logits: bool = False,
     **config_overrides,
 ) -> pd.DataFrame:
     """
@@ -48,6 +49,8 @@ def final_evaluation(
         Training configuration.
     out_dir : Path
         Directory where to save final predictions
+    save_logits : bool
+        Save raw logits
     **config_overrides
         Keyword arguments to override in config
 
@@ -63,7 +66,14 @@ def final_evaluation(
 
     pred_dir = out_dir / "predictions"
     pred_dir.mkdir(exist_ok=True, parents=True)
-    post_transforms = get_post_transforms(val_loader=val_loader, out_dir=pred_dir)
+    pred_post_transforms = get_post_transforms(val_loader=val_loader, out_dir=pred_dir)
+
+    if save_logits:
+        logit_dir = out_dir / "logits"
+        logit_dir.mkdir(exist_ok=True, parents=True)
+        logit_post_transforms = get_logit_post_transforms(
+            val_loader=val_loader, out_dir=logit_dir
+        )
 
     load_label_transforms = Compose(
         [
@@ -90,7 +100,10 @@ def final_evaluation(
             label_path = sample["label"].meta["filename_or_obj"]
             case_id = re.search(r"sub-stroke\d+", label_path).group()
 
-            sample = post_transforms(sample)
+            if save_logits:
+                logit_post_transforms(sample)
+
+            sample = pred_post_transforms(sample)
             original_label = load_label_transforms(label_path)[0]
             if isinstance(original_label, list):
                 original_label: MetaTensor = original_label[0]
