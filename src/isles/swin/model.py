@@ -233,8 +233,11 @@ class SwinUNETRPredictor:
         self.tta_flips = tta_flips
 
         if crop_margin is not None:
+            # ROI size should be passed as tuple to generate_weight_map
             weight_map, overlap = generate_weight_map(
-                roi_size=roi_size, margin=crop_margin, overlap=overlap
+                roi_size=(roi_size, roi_size, roi_size),
+                margin=crop_margin,
+                overlap=overlap,
             )
             sw_blend_mode = "constant"
         else:
