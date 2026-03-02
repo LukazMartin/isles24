@@ -52,7 +52,12 @@ class SwinTrainConfig:
         Enable automatic mixed precision.
     include_background : bool
         Include background class in Dice loss/metric.
-    val_interval : 5
+    inspect_patches: bool
+        If True, run inference on patches from training dataloader and saves them to
+        run_dir / "training-inspection".
+    inspect_interval: int
+        Run training patch inspection every N epochs, if active.
+    val_interval : int
         Validate every N epochs.
     val_overlap : float
         Sliding window overlap during training validation.
@@ -99,6 +104,8 @@ class SwinTrainConfig:
     warmup_ratio: float = 0.05
     amp: bool = True
     include_background: bool = False
+    inspect_patches: bool = False
+    inspect_interval: int = 25
 
     # Validation
     val_interval: int = 5
