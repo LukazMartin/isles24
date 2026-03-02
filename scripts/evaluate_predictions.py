@@ -13,29 +13,31 @@ from isles.swin.evaluation import final_evaluation
 
 def main():
     data_root = Path("/home/renku/work/data-local")
-    run_id = "run-017"
-    run_dir = data_root / f"runs/{run_id}"
-    out_dir = run_dir / "evaluation"
-    checkpoint_path = run_dir / "checkpoints/best_model.pt"
+    run_ids = ["run-021", "run-022"]
+    for run_id in run_ids:
+        run_dir = data_root / f"runs/{run_id}"
+        out_dir = run_dir / "evaluation"
+        checkpoint_path = run_dir / "checkpoints/best_model.pt"
 
-    config = SwinTrainConfig.from_json(run_dir / "config.json")
-    with open(run_dir / "datalist.json") as file:
-        datalist = json.load(file)
+        config = SwinTrainConfig.from_json(run_dir / "config.json")
+        with open(run_dir / "datalist.json") as file:
+            datalist = json.load(file)
 
-    val_loader = get_dataloader(
-        datalist=datalist,
-        key="validation",
-        transforms=get_val_transforms(config),
-        batch_size=config.batch_size,
-        cache_rate=0.0,
-    )
+        val_loader = get_dataloader(
+            datalist=datalist,
+            key="validation",
+            transforms=get_val_transforms(config),
+            batch_size=config.batch_size,
+            cache_rate=0.0,
+        )
 
-    final_evaluation(
-        checkpoint_path=checkpoint_path,
-        val_loader=val_loader,
-        config=config,
-        out_dir=out_dir,
-    )
+        final_evaluation(
+            checkpoint_path=checkpoint_path,
+            val_loader=val_loader,
+            config=config,
+            out_dir=out_dir,
+            save_logits=True,
+        )
 
 
 if __name__ == "__main__":
