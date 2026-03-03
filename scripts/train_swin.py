@@ -3,6 +3,7 @@ Train multi encoder Swin-UNETR
 """
 
 from pathlib import Path
+import re
 from dataclasses import asdict
 import wandb
 from isles.swin.config import SwinTrainConfig
@@ -13,7 +14,7 @@ from isles.utils import generate_datalist
 
 
 def main():
-    run_id = "run-023"
+    run_id = "run-024"
     config = SwinTrainConfig(
         model="MultiEncoderSwinUNETR",
         max_epochs=300,
@@ -29,7 +30,7 @@ def main():
         },
         batch_size=1,
         val_interval=10,
-        inspect_patches=True,
+        inspect_training=True,
         inspect_interval=25,
     )
 
@@ -75,6 +76,7 @@ def main():
         run_dir=run_dir,
         train_loader=train_loader,
         val_loader=val_loader,
+        case_id_fn=lambda p: re.search(r"sub-stroke\d+", p).group(),
     )
 
     checkpoint_path = run_dir / "checkpoints/best_model.pt"
