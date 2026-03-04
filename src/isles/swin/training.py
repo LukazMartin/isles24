@@ -82,13 +82,18 @@ class TrainingInspector:
         self.out_dir = out_dir
         self.save_patches = save_patches
         self.case_id_fn = case_id_fn or (lambda p: Path(p).stem.split(".")[0])
-
-        self.heatmap_acc = np.zeros(roi_size, dtype=np.float64)
-        self.n_patches = 0
+        self.roi_size = roi_size
 
         out_dir.mkdir(parents=True, exist_ok=True)
         self._com_csv_path = out_dir / "com_stats.csv"
         self._com_header_written = self._com_csv_path.exists()
+
+        self._reset_heatmap()
+
+    def _reset_heatmap(self) -> None:
+        """Reset accumulated heatmap"""
+        self.heatmap_acc = np.zeros(self.roi_size, dtype=np.float64)
+        self.n_patches = 0
 
     def update(self, batch: dict, logits: torch.Tensor) -> None:
         """Accumulate heatmap and CoM statistics for one training batch.
@@ -168,10 +173,11 @@ class TrainingInspector:
         config : SwinTrainConfig
             Training configuration.
         """
-        # Heatmap
+        # Heatmap: save current interval's accumulation, then reset
         if self.n_patches > 0:
             heatmap_mean = (self.heatmap_acc / self.n_patches).astype(np.float32)
-            np.save(self.out_dir / "heatmap_foreground_prob.npy", heatmap_mean)
+            np.save(self.out_dir / f"heatmap_epoch_{epoch:04d}.npy", heatmap_mean)
+            self._reset_heatmap()
 
         if not self.save_patches:
             return
