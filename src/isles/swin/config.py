@@ -37,9 +37,11 @@ class SwinTrainConfig:
         Training batch size.
     num_crops_per_image : int
         Number of patches sampled per image.
+    crop_mode : Literal["label_classes", "spatial"]
+        Crop mode, either label-guided or fully random spatial sampling.
     crop_ratios : Sequence[float] | None
-        Per-class sampling ratios for RandCropByLabelClassesd.
-        None for equal sampling.
+        Per-class sampling ratios for RandCropByLabelClassesd, used when crop_mode
+        is ``"label_classes"``. None for equal sampling.
     max_epochs : int
         Total training epochs.
     learning_rate : float
@@ -95,6 +97,7 @@ class SwinTrainConfig:
     roi_size: Sequence[int] = (64, 64, 64)
     batch_size: int = 1
     num_crops_per_image: int = 4
+    crop_mode: Literal["label_classes", "spatial"] = "label_classes"
     crop_ratios: Sequence[float] | None = None
 
     # Training

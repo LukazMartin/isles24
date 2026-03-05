@@ -3,6 +3,7 @@ Code for image processing and transforms
 """
 
 from pathlib import Path
+from typing import Literal
 from collections.abc import Sequence, Mapping
 import numpy as np
 from numpy.typing import DTypeLike
@@ -30,6 +31,8 @@ from monai.transforms import (
     Invertd,
     SaveImaged,
     MaskIntensityd,
+    RandSpatialCropSamplesd,
+    MultiSampleTrait,
 )
 from monai.utils import convert_to_dst_type
 from monai.data import DataLoader
@@ -88,14 +91,14 @@ def get_train_transforms(config: SwinTrainConfig):
             CastToTyped(keys=["image", "label"], dtype=[torch.float32, torch.uint8]),
             EnsureTyped(keys=["image", "label"], track_meta=True),
             SpatialPadd(keys=["image", "label"], spatial_size=config.roi_size),
-            RandCropByLabelClassesd(
+            RandCropByModed(
                 keys=["image", "label"],
                 label_key="label",
+                spatial_size=config.roi_size,
+                num_samples=config.num_crops_per_image,
+                mode=config.crop_mode,
                 num_classes=config.num_classes,
                 ratios=config.crop_ratios,
-                num_samples=config.num_crops_per_image,
-                spatial_size=config.roi_size,
-                warn=False,
             ),
             RandFlipd(keys=["image", "label"], prob=0.2, spatial_axis=0),
             RandFlipd(keys=["image", "label"], prob=0.2, spatial_axis=1),
@@ -246,6 +249,63 @@ class PerChannelScaleIntensityd(MapTransform):
             d[key] = ret
 
         return d
+
+
+class RandCropByModed(MapTransform, MultiSampleTrait):
+    """Randomly crop patches using either label-guided or fully random spatial sampling.
+
+    Parameters
+    ----------
+    keys : Sequence[str]
+        Keys to crop, typically ``["image", "label"]``.
+    label_key : str
+        Key for the label map, used only in ``"label_classes"`` mode.
+    spatial_size : Sequence[int]
+        Spatial size of each cropped patch.
+    num_samples : int
+        Number of patches to sample per image.
+    mode : Literal["label_classes", "spatial"]
+        Crop strategy. ``"label_classes"`` uses ``RandCropByLabelClassesd``,
+        ``"spatial"`` uses ``RandSpatialCropSamplesd`` with no label guidance.
+    num_classes : int
+        Number of classes. Used only in ``"label_classes"`` mode.
+    ratios : Sequence[float] | None
+        Per-class sampling ratios. Used only in ``"label_classes"`` mode.
+    """
+
+    def __init__(
+        self,
+        keys: Sequence[str],
+        label_key: str,
+        spatial_size: Sequence[int],
+        num_samples: int,
+        mode: Literal["label_classes", "spatial"],
+        num_classes: int = 2,
+        ratios: Sequence[float] | None = None,
+    ) -> None:
+        MapTransform.__init__(self, keys)
+        if mode == "label_classes":
+            self._transform = RandCropByLabelClassesd(
+                keys=keys,
+                label_key=label_key,
+                spatial_size=spatial_size,
+                num_classes=num_classes,
+                ratios=ratios,
+                num_samples=num_samples,
+                warn=False,
+            )
+        elif mode == "spatial":
+            self._transform = RandSpatialCropSamplesd(
+                keys=keys,
+                roi_size=spatial_size,
+                num_samples=num_samples,
+                random_size=False,
+            )
+        else:
+            raise ValueError(f"Unknown crop mode: {mode!r}")
+
+    def __call__(self, data: dict) -> list[dict]:
+        return self._transform(data)
 
 
 def get_post_transforms(val_loader: DataLoader, out_dir: Path | None = None) -> Compose:

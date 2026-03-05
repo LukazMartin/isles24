@@ -30,6 +30,12 @@ def parse_args() -> argparse.Namespace:
         type=str,
         choices=["BaseSwinUNETR", "MultiEncoderSwinUNETR"],
     )
+    parser.add_argument(
+        "--crop-mode",
+        default="label_classes",
+        type=str,
+        choices=["label_classes", "spatial"],
+    )
     parser.add_argument("--max-epochs", default=300, type=int)
     parser.add_argument("--learning-rate", default=1e-4, type=float)
     return parser.parse_args()
@@ -45,6 +51,7 @@ def main() -> None:
         target_spacing=(1.0, 1.0, 1.0),
         roi_size=(64, 64, 64),
         learning_rate=args.learning_rate,
+        crop_mode=args.crop_mode,
         crop_ratios=(1, 1),
         include_background=False,
         intensity_windows={
