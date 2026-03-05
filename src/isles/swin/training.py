@@ -88,15 +88,17 @@ class TrainingInspector:
         self._com_csv_path = out_dir / "com_stats.csv"
         self._com_header_written = self._com_csv_path.exists()
 
-        self._reset_heatmap()
+        self._reset_heatmaps()
 
-    def _reset_heatmap(self) -> None:
-        """Reset accumulated heatmap"""
-        self.heatmap_acc = np.zeros(self.roi_size, dtype=np.float64)
+    def _reset_heatmaps(self) -> None:
+        """Reset accumulated heatmaps"""
+        self.heatmap_gt_mask = np.zeros(self.roi_size, dtype=np.float64)
+        self.heatmap_pred_mask = np.zeros(self.roi_size, dtype=np.float64)
+        self.heatmap_pred_prob = np.zeros(self.roi_size, dtype=np.float64)
         self.n_patches = 0
 
     def update(self, batch: dict, logits: torch.Tensor) -> None:
-        """Accumulate heatmap and CoM statistics for one training batch.
+        """Accumulate heatmap and center of mass (CoM) statistics for one training batch.
 
         Should be called after the forward pass on every batch, before
         the backward pass or optimizer step.
@@ -109,7 +111,7 @@ class TrainingInspector:
             Raw model logits of shape ``(B, num_classes, H, W, D)``, on any device.
         """
         probs_fg = torch.softmax(logits.float(), dim=1)[:, 1].detach().cpu().numpy()
-        self.heatmap_acc += probs_fg.sum(axis=0)
+        self.heatmap_pred_prob += probs_fg.sum(axis=0)
         self.n_patches += probs_fg.shape[0]
 
         filenames = batch["image"].meta["filename_or_obj"]
@@ -126,22 +128,38 @@ class TrainingInspector:
             patch_idx = patch_counters.get(case_id, 0)
             patch_counters[case_id] = patch_idx + 1
 
-            gt_com = _center_of_mass_normalized(labels[i, 0].float().cpu().numpy())
+            # Calculate ground truth and prediction center of mass
+            gt_label = labels[i, 0].float().cpu().numpy()
+            gt_com = _center_of_mass_normalized(gt_label)
             pred_mask = (probs_fg[i] > 0.5).astype(np.float32)
             pred_com = _center_of_mass_normalized(pred_mask)
 
-            rows.append({
-                "case_id": case_id,
-                "patch_idx": patch_idx,
-                "gt_empty": np.isnan(gt_com[0]),
-                "pred_empty": np.isnan(pred_com[0]),
-                "gt_com_x": gt_com[0],
-                "gt_com_y": gt_com[1],
-                "gt_com_z": gt_com[2],
-                "pred_com_x": pred_com[0],
-                "pred_com_y": pred_com[1],
-                "pred_com_z": pred_com[2],
-            })
+            # Calculate patch dice score
+            intersection = (gt_label * pred_mask).sum()
+            denom = gt_label.sum() + pred_mask.sum()
+            patch_dice = float(2 * intersection / denom) if denom > 0 else float("nan")
+
+            # Update accumulated mask heatmaps
+            self.heatmap_gt_mask += gt_label
+            self.heatmap_pred_mask += pred_mask
+
+            rows.append(
+                {
+                    "case_id": case_id,
+                    "patch_idx": patch_idx,
+                    "gt_empty": np.isnan(gt_com[0]),
+                    "pred_empty": np.isnan(pred_com[0]),
+                    "gt_com_x": gt_com[0],
+                    "gt_com_y": gt_com[1],
+                    "gt_com_z": gt_com[2],
+                    "pred_com_x": pred_com[0],
+                    "pred_com_y": pred_com[1],
+                    "pred_com_z": pred_com[2],
+                    "gt_fg_voxels": int(gt_label.sum()),
+                    "pred_fg_voxels": int(pred_mask.sum()),
+                    "patch_dice": patch_dice,
+                }
+            )
 
         with open(self._com_csv_path, "a", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=rows[0].keys())
@@ -173,11 +191,26 @@ class TrainingInspector:
         config : SwinTrainConfig
             Training configuration.
         """
+
         # Heatmap: save current interval's accumulation, then reset
+        def save_heatmap(heatmap: np.ndarray, filename: str) -> None:
+            """Save heatmap to self.out_dir/heatmaps/filename"""
+            heatmap_mean = (heatmap / self.n_patches).astype(np.float32)
+            heatmap_dir = self.out_dir / "heatmaps"
+            heatmap_dir.mkdir(exist_ok=True, parents=True)
+            np.save(self.heatmap_dir / filename, heatmap_mean)
+
         if self.n_patches > 0:
-            heatmap_mean = (self.heatmap_acc / self.n_patches).astype(np.float32)
-            np.save(self.out_dir / f"heatmap_epoch_{epoch:04d}.npy", heatmap_mean)
-            self._reset_heatmap()
+            save_heatmap(
+                self.heatmap_gt_mask, f"heatmap_gt_mask_epoch_{epoch:04d}.npy"
+            )
+            save_heatmap(
+                self.heatmap_pred_mask, f"heatmap_pred_mask_epoch_{epoch:04d}.npy"
+            )
+            save_heatmap(
+                self.heatmap_pred_prob, f"heatmap_pred_prob_epoch_{epoch:04d}.npy"
+            )
+            self._reset_heatmaps()
 
         if not self.save_patches:
             return
