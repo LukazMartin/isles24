@@ -84,7 +84,9 @@ class TrainingInspector:
         self.case_id_fn = case_id_fn or (lambda p: Path(p).stem.split(".")[0])
         self.roi_size = roi_size
 
-        out_dir.mkdir(parents=True, exist_ok=True)
+        self.heatmap_dir = self.out_dir / "heatmaps"
+        self.heatmap_dir.mkdir(exist_ok=True, parents=True)
+
         self._com_csv_path = out_dir / "com_stats.csv"
         self._com_header_written = self._com_csv_path.exists()
 
@@ -194,10 +196,8 @@ class TrainingInspector:
 
         # Heatmap: save current interval's accumulation, then reset
         def save_heatmap(heatmap: np.ndarray, filename: str) -> None:
-            """Save heatmap to self.out_dir/heatmaps/filename"""
+            """Save heatmap to self.heatmap_dir/filename"""
             heatmap_mean = (heatmap / self.n_patches).astype(np.float32)
-            heatmap_dir = self.out_dir / "heatmaps"
-            heatmap_dir.mkdir(exist_ok=True, parents=True)
             np.save(self.heatmap_dir / filename, heatmap_mean)
 
         if self.n_patches > 0:
