@@ -2,7 +2,6 @@
 
 from pathlib import Path
 import re
-import logging
 
 import torch
 from tqdm import tqdm
@@ -60,9 +59,6 @@ def final_evaluation(
     pd.DataFrame
         Dataframe with per case results results.
     """
-    # Suppress redundant INFO-level logging of MONAI writing to disk.
-    logging.getLogger("monai.transforms.io.array").setLevel(logging.WARNING)
-    
     device = torch.device(config.device)
     predictor = SwinUNETRPredictor.from_checkpoint(
         checkpoint_path=checkpoint_path, device=device, final=True, **config_overrides

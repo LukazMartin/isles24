@@ -21,10 +21,12 @@ python inference.py --run_ids run-021 --checkpoint best --crop_margin 10 --save_
 python inference.py --run_ids run-021 --overlap 0.5 0.75 --blend_mode gaussian --checkpoint last
 """
 
+import logging
 import argparse
 import json
 from itertools import product
 from pathlib import Path
+from contextlib import contextmanager
 
 from tqdm import tqdm
 
@@ -32,6 +34,15 @@ from isles.swin.config import SwinTrainConfig
 from isles.swin.evaluation import final_evaluation
 from isles.swin.training import get_dataloader
 from isles.swin.transforms import get_val_transforms
+
+
+@contextmanager
+def suppress_logs(level: int = logging.INFO):
+    logging.disable(level)
+    try:
+        yield
+    finally:
+        logging.disable(logging.NOTSET)
 
 
 def parse_args() -> argparse.Namespace:
@@ -95,54 +106,52 @@ def main() -> None:
     # crop_margin forces constant blend; sweeping blend_mode is meaningless in that case
     blend_modes = ["constant"] if args.crop_margin is not None else args.blend_mode
 
-    for run_id in tqdm(args.run_ids, desc="Evaluating runs"):
+    combinations = list(product(args.run_ids, args.checkpoint, args.overlap, blend_modes))
+
+    for run_id, ckpt, o, b in tqdm(combinations, desc="Evaluating runs"):
         run_dir = args.data_root / f"runs/{run_id}"
 
         config = SwinTrainConfig.from_json(run_dir / "config.json")
         with open(run_dir / "datalist.json") as file:
             datalist = json.load(file)
 
-        for ckpt, o, b in product(args.checkpoint, args.overlap, blend_modes):
-            val_loader = get_dataloader(
-                datalist=datalist,
-                key="validation",
-                transforms=get_val_transforms(config),
-                batch_size=config.batch_size,
-                cache_rate=0.0,
-            )
+        val_loader = get_dataloader(
+            datalist=datalist,
+            key="validation",
+            transforms=get_val_transforms(config),
+            batch_size=config.batch_size,
+            cache_rate=0.0,
+        )
 
-            checkpoint_file = f"{ckpt}_model.pt"
-            checkpoint_path = run_dir / "checkpoints" / checkpoint_file
-            out_dir = run_dir / f"inference-{ckpt}"
+        checkpoint_file = f"{ckpt}_model.pt"
+        checkpoint_path = run_dir / "checkpoints" / checkpoint_file
+        out_dir = run_dir / f"inference-{ckpt}"
 
-            print(f"[{run_id}] checkpoint={checkpoint_file}, overlap={o}, blend_mode={b}", end="")
+        if args.crop_margin is not None:
+            out_dir = out_dir / f"overlap_{o}-crop_{args.crop_margin}"
+        else:
+            out_dir = out_dir / f"overlap_{o}-blend_{b}"
 
-            if args.crop_margin is not None:
-                out_dir = out_dir / f"overlap_{o}-crop_{args.crop_margin}"
-                print(f", crop_margin={args.crop_margin}")
-            else:
-                out_dir = out_dir / f"overlap_{o}-blend_{b}"
-                print()
-
-            params = {
-                "checkpoint": checkpoint_file,
-                "val_overlap_final": o,
-                "inferer_blend_mode": b,
-                "inferer_crop_margin": args.crop_margin,
-            }
-            final_evaluation(
-                checkpoint_path=checkpoint_path,
-                val_loader=val_loader,
-                config=config,
-                out_dir=out_dir,
-                save_logits=args.save_logits,
-                val_overlap_final=o,
-                inferer_blend_mode=b,
-                inferer_crop_margin=args.crop_margin,
-            )
-            with open(out_dir / "params.json", "w") as file:
-                json.dump(params, file, indent=2)
+        params = {
+            "checkpoint": checkpoint_file,
+            "val_overlap_final": o,
+            "inferer_blend_mode": b,
+            "inferer_crop_margin": args.crop_margin,
+        }
+        final_evaluation(
+            checkpoint_path=checkpoint_path,
+            val_loader=val_loader,
+            config=config,
+            out_dir=out_dir,
+            save_logits=args.save_logits,
+            val_overlap_final=o,
+            inferer_blend_mode=b,
+            inferer_crop_margin=args.crop_margin,
+        )
+        with open(out_dir / "params.json", "w") as file:
+            json.dump(params, file, indent=2)
 
 
 if __name__ == "__main__":
-    main()
+    with suppress_logs():
+        main()
