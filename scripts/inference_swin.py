@@ -9,10 +9,10 @@ where out_subdir encodes the inference parameters used.
 Examples
 --------
 # Default conditions on last model (constant + gaussian, overlap 0.5, no logits):
-python inference.py --run_ids run-021 run-022 --checkpoint last
+python inference.py --run_ids run-021 run-022
 
-# Best model, save logits:
-python inference.py --run_ids run-021 run-022 --checkpoint best --save_logits
+# Both checkpoints in one sweep:
+python inference.py --run_ids run-021 run-022 --checkpoint best last --save_logits
 
 # Crop-margin mode (replaces inference_crop.py):
 python inference.py --run_ids run-021 --checkpoint best --crop_margin 10 --save_logits
@@ -47,9 +47,10 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--checkpoint",
+        nargs="+",
         choices=["best", "last"],
-        default="last",
-        help="Which model checkpoint to use.",
+        default=["last"],
+        help="Checkpoint(s) to evaluate. Accepts both: --checkpoint best last.",
     )
     parser.add_argument(
         "--overlap",
@@ -91,38 +92,36 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    checkpoint_file = f"{args.checkpoint}_model.pt"
     # crop_margin forces constant blend; sweeping blend_mode is meaningless in that case
     blend_modes = ["constant"] if args.crop_margin is not None else args.blend_mode
 
     for run_id in tqdm(args.run_ids, desc="Evaluating runs"):
         run_dir = args.data_root / f"runs/{run_id}"
-        sweep_dir = run_dir / f"inference-{args.checkpoint}"
-        checkpoint_path = run_dir / "checkpoints" / checkpoint_file
 
         config = SwinTrainConfig.from_json(run_dir / "config.json")
         with open(run_dir / "datalist.json") as file:
             datalist = json.load(file)
 
-        val_loader = get_dataloader(
-            datalist=datalist,
-            key="validation",
-            transforms=get_val_transforms(config),
-            batch_size=config.batch_size,
-            cache_rate=0.0,
-        )
-
-        for o, b in product(args.overlap, blend_modes):
-            print(
-                f"[{run_id}] checkpoint={checkpoint_file}, overlap={o}, blend_mode={b}",
-                end="",
+        for ckpt, o, b in product(args.checkpoint, args.overlap, blend_modes):
+            val_loader = get_dataloader(
+                datalist=datalist,
+                key="validation",
+                transforms=get_val_transforms(config),
+                batch_size=config.batch_size,
+                cache_rate=0.0,
             )
 
+            checkpoint_file = f"{ckpt}_model.pt"
+            checkpoint_path = run_dir / "checkpoints" / checkpoint_file
+            out_dir = run_dir / f"inference-{ckpt}"
+
+            print(f"[{run_id}] checkpoint={checkpoint_file}, overlap={o}, blend_mode={b}", end="")
+
             if args.crop_margin is not None:
-                out_dir = sweep_dir / f"overlap_{o}-crop_{args.crop_margin}"
+                out_dir = out_dir / f"overlap_{o}-crop_{args.crop_margin}"
                 print(f", crop_margin={args.crop_margin}")
             else:
-                out_dir = sweep_dir / f"overlap_{o}-blend_{b}"
+                out_dir = out_dir / f"overlap_{o}-blend_{b}"
                 print()
 
             params = {
