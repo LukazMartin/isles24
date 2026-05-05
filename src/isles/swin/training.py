@@ -224,7 +224,11 @@ class TrainingInspector:
         labels: torch.Tensor = batch["label"]
 
         with torch.amp.autocast(device.type, dtype=torch.bfloat16, enabled=config.amp):
-            logits = model(images.to(device))
+            #logits = model(images.to(device))
+            tabular_embedding = batch.get("tabular_embedding")
+            if tabular_embedding is not None:
+                tabular_embedding = tabular_embedding.to(device).float()
+            logits = model(images.to(device), tabular_embedding=tabular_embedding)
 
         logits = logits.float().cpu()
         epoch_dir = self.out_dir / f"patches/epoch_{epoch:04d}"
@@ -301,7 +305,11 @@ def _train_epoch(
         optimizer.zero_grad()
 
         with torch.amp.autocast(device.type, dtype=torch.bfloat16, enabled=config.amp):
-            logits = model(image)
+            #logits = model(image)
+            tabular_embedding = batch.get("tabular_embedding")
+            if tabular_embedding is not None:
+                tabular_embedding = tabular_embedding.to(device).float()
+            logits = model(image, tabular_embedding=tabular_embedding)
             loss = loss_fn(logits, label)
 
         loss.backward()
@@ -343,7 +351,18 @@ def _validate_epoch(
         label = batch["label"].to(device)
 
         with torch.amp.autocast(device.type, dtype=torch.bfloat16, enabled=config.amp):
-            logits = inferer(image, model)
+            #logits = inferer(image, model)
+            tabular_embedding = batch.get("tabular_embedding")
+            if tabular_embedding is not None:
+                tabular_embedding = tabular_embedding.to(device).float()
+                logits = inferer(
+                    image,
+                    lambda patch: model(
+                        patch, tabular_embedding=tabular_embedding
+                    ),
+                )
+            else:
+                logits = inferer(image, model)
             loss = loss_fn(logits, label)
 
         pred = logits.argmax(dim=1, keepdim=True)

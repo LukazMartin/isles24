@@ -91,6 +91,7 @@ class MultiEncoderSwinUNETR(SwinUNETR):
         num_classes: int = 2,
         feature_size: int = 48,
         fusion_kernel_size: int = 1,
+        tabular_embedding_dim: int = 0,
         **kwargs,
     ) -> None:
         super().__init__(
@@ -101,6 +102,7 @@ class MultiEncoderSwinUNETR(SwinUNETR):
         )
 
         self.modalities = modalities
+        self.tabular_embedding_dim = tabular_embedding_dim
         num_modalities = len(modalities)
 
         self.swin_encoders = nn.ModuleDict(
@@ -119,6 +121,15 @@ class MultiEncoderSwinUNETR(SwinUNETR):
                 for mult in [1, 2, 4, 8, 16]
             ]
         )
+        if tabular_embedding_dim > 0:
+            # fused_hidden_states[4] has channel size feature_size * 16
+            self.tabular_proj = nn.Sequential(
+                nn.Linear(tabular_embedding_dim, feature_size * 16),
+                nn.GELU(),
+                nn.Linear(feature_size * 16, feature_size * 16),
+            )
+        else:
+            self.tabular_proj = None
 
         # Replace encoder1 to handle multi-channel input
         self.encoder1 = UnetrBasicBlock(
@@ -144,7 +155,9 @@ class MultiEncoderSwinUNETR(SwinUNETR):
             )
             print(f"Encoder [{modality}]: loaded {len(loaded)} keys")
 
-    def forward(self, x_in: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, x_in: torch.Tensor, tabular_embedding: torch.Tensor | None = None
+    ) -> torch.Tensor:
         assert x_in.shape[1] == len(self.modalities)
 
         # Run each modality through its encoder
@@ -164,7 +177,14 @@ class MultiEncoderSwinUNETR(SwinUNETR):
         enc1 = self.encoder2(fused_hidden_states[0])
         enc2 = self.encoder3(fused_hidden_states[1])
         enc3 = self.encoder4(fused_hidden_states[2])
-        dec4 = self.encoder10(fused_hidden_states[4])
+        #dec4 = self.encoder10(fused_hidden_states[4])
+        bottleneck = fused_hidden_states[4]
+        if self.tabular_proj is not None and tabular_embedding is not None:
+            tabular_shift = self.tabular_proj(tabular_embedding.float())
+            tabular_shift = tabular_shift.view(tabular_shift.shape[0], -1, 1, 1, 1)
+            bottleneck = bottleneck + tabular_shift
+
+        dec4 = self.encoder10(bottleneck)
 
         dec3 = self.decoder5(dec4, fused_hidden_states[3])
         dec2 = self.decoder4(dec3, enc3)
@@ -183,6 +203,7 @@ class MultiEncoderSwinUNETR(SwinUNETR):
             num_classes=config.num_classes,
             feature_size=config.feature_size,
             fusion_kernel_size=config.fusion_kernel_size,
+            tabular_embedding_dim=config.tabular_embedding_dim,
         )
 
 

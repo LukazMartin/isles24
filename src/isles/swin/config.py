@@ -95,6 +95,7 @@ class SwinTrainConfig:
     feature_size: int = 48
     fusion_kernel_size: int = 1
     num_classes: int = 2
+    tabular_embedding_dim: int = 0
 
     # Training / inference patches
     roi_size: Sequence[int] = (64, 64, 64)
