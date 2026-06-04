@@ -95,6 +95,7 @@ class MultiEncoderSwinUNETR(SwinUNETR):
         feature_size: int = 48,
         fusion_kernel_size: int = 1,
         tabular_embedding_dim: int = 0,
+        tabular_decoder_context_dim: int = 16,
         **kwargs,
     ) -> None:
         super().__init__(
@@ -106,6 +107,9 @@ class MultiEncoderSwinUNETR(SwinUNETR):
 
         self.modalities = modalities
         self.tabular_embedding_dim = tabular_embedding_dim
+        self.tabular_decoder_context_dim = (
+            tabular_decoder_context_dim if tabular_embedding_dim > 0 else 0
+        )
         num_modalities = len(modalities)
 
         self.swin_encoders = nn.ModuleDict(
@@ -145,6 +149,7 @@ class MultiEncoderSwinUNETR(SwinUNETR):
             # Keep concatenating tabular context at each decoder scale.
             self.tabular_decoder_channels = [feature_size * 8, feature_size * 4, feature_size * 2, feature_size]
             """
+            """
             # Keep concatenating tabular context at each decoder scale, but use
             # a fixed-width tabular branch instead of matching decoder channels.
             self.tabular_decoder_context_dim = 16
@@ -154,6 +159,17 @@ class MultiEncoderSwinUNETR(SwinUNETR):
                 feature_size * 2,
                 feature_size,
             ]
+            """
+            # Keep concatenating tabular context at each decoder scale, but use
+            # a configurable fixed-width tabular branch instead of matching
+            # decoder channels.
+            self.tabular_decoder_channels = [
+                feature_size * 8,
+                feature_size * 4,
+                feature_size * 2,
+                feature_size,
+            ]
+
 
             self.tabular_decoder_proj = nn.ModuleList(
                 # [nn.Linear(tabular_embedding_dim, ch) for ch in self.tabular_decoder_channels]
@@ -326,6 +342,7 @@ class MultiEncoderSwinUNETR(SwinUNETR):
             feature_size=config.feature_size,
             fusion_kernel_size=config.fusion_kernel_size,
             tabular_embedding_dim=config.tabular_embedding_dim,
+            tabular_decoder_context_dim=config.tabular_decoder_context_dim,
         )
 
 

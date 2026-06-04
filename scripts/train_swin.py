@@ -53,6 +53,15 @@ def parse_args() -> argparse.Namespace:
             "phenotype_embedding_index.csv."
         ),
     )
+    parser.add_argument(
+        "--tabular-decoder-context-dim",
+        default=16,
+        type=int,
+        help=(
+            "Fixed tabular channel width concatenated into each decoder stage. "
+            "Tune this hyperparameter when using --include-tabular-embeddings."
+        ),
+    )
     return parser.parse_args()
 
 def _case_id_from_path(path: str) -> str:
@@ -126,6 +135,7 @@ def main() -> None:
         val_interval=10,
         inspect_training=True,
         inspect_interval=25,
+        tabular_decoder_context_dim=args.tabular_decoder_context_dim,
     )
 
     data_root = Path("/home/renku/work/data-local")

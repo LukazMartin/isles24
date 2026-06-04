@@ -33,6 +33,12 @@ class SwinTrainConfig:
         Kernel size for multi-encoder fusion convolution.
     num_classes : int
         Number of classes including background (2 for binary segmentation).
+    tabular_embedding_dim : int
+        Size of optional tabular conditioning vectors. Set to 0 to disable tabular
+        conditioning.
+    tabular_decoder_context_dim : int
+        Fixed number of tabular channels concatenated at each decoder stage when
+        tabular conditioning is enabled. Tune this as a hyperparameter.
     roi_size : Sequence[int]
         Patch size for training and sliding window inference.
     batch_size : int
@@ -96,6 +102,7 @@ class SwinTrainConfig:
     fusion_kernel_size: int = 1
     num_classes: int = 2
     tabular_embedding_dim: int = 0
+    tabular_decoder_context_dim: int = 16
 
     # Training / inference patches
     roi_size: Sequence[int] = (64, 64, 64)
@@ -128,6 +135,9 @@ class SwinTrainConfig:
 
     def __post_init__(self) -> None:
         """Ensure that parameter values are not incompatible"""
+
+        if self.tabular_decoder_context_dim < 1:
+            raise ValueError("tabular_decoder_context_dim must be at least 1")
 
         # Update parameters when crop_margin is specified
         if self.inferer_crop_margin is not None:
